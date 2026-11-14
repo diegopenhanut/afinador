@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#111">
+<title>Afinador</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #111; color: #eee;
+    font-family: system-ui, -apple-system, Roboto, sans-serif; }
+  body { display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 24px; padding: 24px; text-align: center; }
+  #note { font-size: 34vw; max-font-size: 200px; line-height: 1; font-weight: 700; }
+  @media (min-width: 600px) { #note { font-size: 180px; } }
+  #note sub { font-size: 0.3em; font-weight: 400; color: #888; }
+  #cents { font-size: 28px; font-variant-numeric: tabular-nums; min-height: 34px; }
+  #freq { color: #888; font-variant-numeric: tabular-nums; min-height: 20px; }
+  .meter { position: relative; width: min(90vw, 480px); height: 56px; }
+  .scale { position: absolute; inset: 24px 0 auto 0; height: 8px; border-radius: 4px;
+    background: linear-gradient(90deg, #c33 0%, #c93 35%, #3c6 47%, #3c6 53%, #c93 65%, #c33 100%); }
+  .center { position: absolute; left: 50%; top: 10px; width: 2px; height: 36px;
+    background: #fff; transform: translateX(-50%); opacity: .6; }
+  #needle { position: absolute; left: 50%; top: 0; width: 6px; height: 56px; border-radius: 3px;
+    background: #fff; transform: translateX(-50%); transition: left .12s linear, background .2s; }
+  .labels { display: flex; justify-content: space-between; width: min(90vw, 480px);
+    color: #777; font-size: 13px; margin-top: -16px; }
+  .strings { display: flex; gap: 8px; }
+  .strings span { width: 40px; padding: 8px 0; border-radius: 8px; background: #222; color: #888; font-weight: 600; }
+  .strings span.on { background: #3c6; color: #111; }
+  .ok #note { color: #3c6; }
+  button { font-size: 20px; padding: 14px 32px; border: 0; border-radius: 12px;
+    background: #3c6; color: #111; font-weight: 700; }
+  #msg { color: #c93; max-width: 420px; }
+</style>
+</head>
+<body>
+  <div id="note">–</div>
+  <div id="cents"></div>
+  <div class="meter"><div class="scale"></div><div class="center"></div><div id="needle"></div></div>
+  <div class="labels"><span>−50</span><span>0</span><span>+50</span></div>
+  <div id="freq"></div>
+  <div class="strings" id="strings"></div>
+  <button id="start">Começar</button>
+  <div id="msg"></div>
+
+<script>
+const NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const A4 = 440;
+const GUITAR = [['E',2],['A',2],['D',3],['G',3],['B',3],['E',4]]; // afinação padrão
+
+const $ = id => document.getElementById(id);
+$('strings').innerHTML = GUITAR.map(([n,o]) => `<span data-k="${n}${o}">${n}</span>`).join('');
+
+let ctx, analyser, buf, history = [], silentFrames = 0;
+
+$('start').onclick = async () => {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+    });
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const src = ctx.createMediaStreamSource(stream);
+    analyser = ctx.createAnalyser();
+    analyser.fftSize = 4096;
+    src.connect(analyser);
+    buf = new Float32Array(analyser.fftSize);
+    $('start').style.display = 'none';
+    $('msg').textContent = '';
+    try { await navigator.wakeLock?.request('screen'); } catch (e) {}
+    loop();
+  } catch (e) {
+    $('msg').textContent = 'Não consegui acessar o microfone. Verifique a permissão e se a página está em https:// (' + e.name + ').';
+  }
+};
+
+// Autocorrelação (variante "ACF2+") com interpolação parabólica
+function detectPitch(b, sr) {
+  const n = b.length;
+  let rms = 0;
+  for (let i = 0; i < n; i++) rms += b[i] * b[i];
+  if (Math.sqrt(rms / n) < 0.01) return -1; // silêncio
+
+  // recorta as bordas fracas
+  let r1 = 0, r2 = n - 1, th = 0.2;
+  for (let i = 0; i < n / 2; i++) if (Math.abs(b[i]) < th) { r1 = i; break; }
+  for (let i = 1; i < n / 2; i++) if (Math.abs(b[n - i]) < th) { r2 = n - i; break; }
+  const x = b.slice(r1, r2), m = x.length;
+
+  const c = new Float32Array(m);
+  for (let lag = 0; lag < m; lag++) {
+    let s = 0;
+    for (let i = 0; i < m - lag; i++) s += x[i] * x[i + lag];
+    c[lag] = s;
+  }
+  let d = 0;
+  while (d < m - 1 && c[d] > c[d + 1]) d++;
+  let maxV = -1, maxP = -1;
+  for (let i = d; i < m; i++) if (c[i] > maxV) { maxV = c[i]; maxP = i; }
+  if (maxP <= 0 || maxP >= m - 1) return -1;
+
+  const y1 = c[maxP - 1], y2 = c[maxP], y3 = c[maxP + 1];
+  const a = (y1 + y3 - 2 * y2) / 2, bb = (y3 - y1) / 2;
+  const T = a ? maxP - bb / (2 * a) : maxP;
+  return sr / T;
+}
+
+function median(arr) { const s = [...arr].sort((a, b) => a - b); return s[s.length >> 1]; }
+
+function loop() {
+  analyser.getFloatTimeDomainData(buf);
+  const f = detectPitch(buf, ctx.sampleRate);
+
+  if (f > 60 && f < 1200) {
+    silentFrames = 0;
+    history.push(f); if (history.length > 5) history.shift();
+    show(median(history));
+  } else if (++silentFrames > 30) {
+    history = [];
+    $('note').innerHTML = '–'; $('cents').textContent = ''; $('freq').textContent = '';
+    $('needle').style.left = '50%'; document.body.classList.remove('ok');
+    document.querySelectorAll('.strings span').forEach(s => s.classList.remove('on'));
+  }
+  requestAnimationFrame(loop);
+}
+
+function show(f) {
+  const midiF = 69 + 12 * Math.log2(f / A4);
+  const midi = Math.round(midiF);
+  const cents = Math.round((midiF - midi) * 100);
+  const name = NAMES[(midi % 12 + 12) % 12], oct = Math.floor(midi / 12) - 1;
+
+  $('note').innerHTML = `${name}<sub>${oct}</sub>`;
+  $('cents').textContent = Math.abs(cents) <= 5 ? 'Afinado ✓'
+    : (cents < 0 ? `${cents} cents · aperte` : `+${cents} cents · afrouxe`);
+  $('freq').textContent = f.toFixed(1) + ' Hz';
+  $('needle').style.left = (50 + cents) + '%';
+  const ok = Math.abs(cents) <= 5;
+  document.body.classList.toggle('ok', ok);
+  $('needle').style.background = ok ? '#3c6' : '#fff';
+  document.querySelectorAll('.strings span').forEach(s =>
+    s.classList.toggle('on', s.dataset.k === name + oct));
+}
+</script>
+</body>
+</html>
