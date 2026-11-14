@@ -5,88 +5,267 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#111">
 <title>Afinador</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
 <style>
-  * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; background: #111; color: #eee;
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; min-height: 100%; background: #111; color: #eee;
     font-family: system-ui, -apple-system, Roboto, sans-serif; }
-  body { display: flex; flex-direction: column; align-items: center;
-    justify-content: center; gap: 24px; padding: 24px; text-align: center; }
-  #note { font-size: 34vw; max-font-size: 200px; line-height: 1; font-weight: 700; }
-  @media (min-width: 600px) { #note { font-size: 180px; } }
-  #note sub { font-size: 0.3em; font-weight: 400; color: #888; }
-  #cents { font-size: 28px; font-variant-numeric: tabular-nums; min-height: 34px; }
-  #freq { color: #888; font-variant-numeric: tabular-nums; min-height: 20px; }
+  body { display: flex; flex-direction: column; align-items: center; padding: 16px 20px 32px; text-align: center; }
+  [hidden] { display: none !important; }
+
+  nav { display: flex; gap: 4px; background: #1d1d1d; border-radius: 12px; padding: 4px; margin-bottom: 28px; }
+  nav button { background: none; color: #888; font-size: 16px; padding: 10px 26px; border-radius: 9px; font-weight: 600; }
+  nav button.on { background: #333; color: #fff; }
+
+  section { display: flex; flex-direction: column; align-items: center; gap: 22px; width: 100%; }
+
+  .note { font-size: min(34vw, 180px); line-height: 1; font-weight: 700; }
+  .note sub { font-size: 0.3em; font-weight: 400; color: #888; }
+  .ok .note, .good { color: #3c6; }
+  .cents { font-size: 26px; font-variant-numeric: tabular-nums; min-height: 32px; }
+  .freq { color: #888; font-variant-numeric: tabular-nums; min-height: 20px; }
+
   .meter { position: relative; width: min(90vw, 480px); height: 56px; }
   .scale { position: absolute; inset: 24px 0 auto 0; height: 8px; border-radius: 4px;
     background: linear-gradient(90deg, #c33 0%, #c93 35%, #3c6 47%, #3c6 53%, #c93 65%, #c33 100%); }
-  .center { position: absolute; left: 50%; top: 10px; width: 2px; height: 36px;
-    background: #fff; transform: translateX(-50%); opacity: .6; }
-  #needle { position: absolute; left: 50%; top: 0; width: 6px; height: 56px; border-radius: 3px;
+  .center { position: absolute; left: 50%; top: 10px; width: 2px; height: 36px; background: #fff; transform: translateX(-50%); opacity: .6; }
+  .needle { position: absolute; left: 50%; top: 0; width: 6px; height: 56px; border-radius: 3px;
     background: #fff; transform: translateX(-50%); transition: left .12s linear, background .2s; }
-  .labels { display: flex; justify-content: space-between; width: min(90vw, 480px);
-    color: #777; font-size: 13px; margin-top: -16px; }
+  .labels { display: flex; justify-content: space-between; width: min(90vw, 480px); color: #777; font-size: 13px; margin-top: -16px; }
+
   .strings { display: flex; gap: 8px; }
-  .strings span { width: 40px; padding: 8px 0; border-radius: 8px; background: #222; color: #888; font-weight: 600; }
-  .strings span.on { background: #3c6; color: #111; }
-  .ok #note { color: #3c6; }
-  button { font-size: 20px; padding: 14px 32px; border: 0; border-radius: 12px;
-    background: #3c6; color: #111; font-weight: 700; }
-  #msg { color: #c93; max-width: 420px; }
+  .strings span, .strings button { width: 44px; padding: 10px 0; border-radius: 10px; background: #222; color: #888; font-weight: 700; font-size: 16px; }
+  .strings span.on, .strings button.on { background: #3c6; color: #111; }
+  .strings button small { display: block; font-size: 10px; font-weight: 400; opacity: .7; }
+
+  button { border: 0; font: inherit; cursor: pointer; }
+  .primary { font-size: 20px; padding: 14px 32px; border-radius: 12px; background: #3c6; color: #111; font-weight: 700; }
+  .primary:disabled { opacity: .35; }
+  .ghost { font-size: 16px; padding: 10px 20px; border-radius: 10px; background: #222; color: #ddd; }
+  .ghost:disabled { opacity: .35; }
+  .msg { color: #c93; max-width: 420px; min-height: 20px; }
+
+  .hint { color: #aaa; margin: 0; max-width: 360px; }
+  .mystery { width: 160px; height: 160px; border-radius: 50%; border: 3px dashed #333;
+    display: flex; align-items: center; justify-content: center; font-size: 80px; color: #444; transition: border-color .15s; }
+  .mystery.hearing { border-color: #3c6; color: #3c6; }
+  .score { font-size: 96px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+  .score small { font-size: 28px; color: #777; font-weight: 400; }
+  .verdict { font-size: 20px; font-weight: 600; }
+  .best { color: #777; font-size: 14px; }
+  .live-label { color: #777; font-size: 13px; margin-bottom: -14px; }
 </style>
 </head>
 <body>
-  <div id="note">–</div>
-  <div id="cents"></div>
-  <div class="meter"><div class="scale"></div><div class="center"></div><div id="needle"></div></div>
-  <div class="labels"><span>−50</span><span>0</span><span>+50</span></div>
-  <div id="freq"></div>
-  <div class="strings" id="strings"></div>
-  <button id="start">Começar</button>
-  <div id="msg"></div>
+  <nav>
+    <button id="tabTuner" class="on">Afinador</button>
+    <button id="tabTrain">Treino</button>
+  </nav>
+
+  <!-- ===== AFINADOR ===== -->
+  <section id="tunerPanel">
+    <div class="note" id="note">–</div>
+    <div class="cents" id="cents"></div>
+    <div class="meter"><div class="scale"></div><div class="center"></div><div class="needle" id="needle"></div></div>
+    <div class="labels"><span>−50</span><span>0</span><span>+50</span></div>
+    <div class="freq" id="freq"></div>
+    <div class="strings" id="strings"></div>
+  </section>
+
+  <!-- ===== TREINO ===== -->
+  <section id="trainPanel" hidden>
+    <p class="hint" id="trainHint">Escolha a corda para ouvir o som de referência. Depois afine de ouvido.</p>
+    <div class="strings" id="trainStrings"></div>
+    <button class="ghost" id="replay" disabled>🔊 Ouvir de novo</button>
+
+    <!-- fase às cegas -->
+    <div id="blind">
+      <div class="mystery" id="mystery">?</div>
+    </div>
+
+    <!-- resultado + afinação normal -->
+    <div id="result" hidden style="display:flex;flex-direction:column;align-items:center;gap:18px">
+      <div class="score" id="score">0<small>/100</small></div>
+      <div class="verdict" id="verdict"></div>
+      <div class="cents" id="scoreCents"></div>
+      <div class="best" id="best"></div>
+      <div class="live-label">Ajuste agora com o medidor</div>
+      <div class="meter"><div class="scale"></div><div class="center"></div><div class="needle" id="needle2"></div></div>
+      <div class="labels"><span>−50</span><span>0</span><span>+50</span></div>
+      <div class="cents" id="liveCents"></div>
+    </div>
+
+    <button class="primary" id="reveal" disabled>Mostrar pontuação</button>
+    <button class="ghost" id="again" hidden>Novo treino</button>
+  </section>
+
+  <button class="primary" id="start">Começar</button>
+  <div class="msg" id="msg"></div>
 
 <script>
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+
 const NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const A4 = 440;
-const GUITAR = [['E',2],['A',2],['D',3],['G',3],['B',3],['E',4]]; // afinação padrão
+const midiToFreq = m => A4 * Math.pow(2, (m - 69) / 12);
+// afinação padrão, da 6ª para a 1ª corda
+const GUITAR = [
+  { n: 'E', o: 2, midi: 40, corda: 6 }, { n: 'A', o: 2, midi: 45, corda: 5 },
+  { n: 'D', o: 3, midi: 50, corda: 4 }, { n: 'G', o: 3, midi: 55, corda: 3 },
+  { n: 'B', o: 3, midi: 59, corda: 2 }, { n: 'E', o: 4, midi: 64, corda: 1 },
+].map(s => ({ ...s, f: midiToFreq(s.midi), key: s.n + s.o }));
 
 const $ = id => document.getElementById(id);
-$('strings').innerHTML = GUITAR.map(([n,o]) => `<span data-k="${n}${o}">${n}</span>`).join('');
+$('strings').innerHTML = GUITAR.map(s => `<span data-k="${s.key}">${s.n}</span>`).join('');
+$('trainStrings').innerHTML = GUITAR.map((s, i) =>
+  `<button data-i="${i}">${s.n}<small>${s.corda}ª</small></button>`).join('');
 
-let ctx, analyser, buf, history = [], silentFrames = 0;
+let ctx, analyser, buf, micReady = false;
+let history = [], samples = [], silentFrames = 0, ignoreUntil = 0;
+let mode = 'tuner';
+const train = { target: null, revealed: false };
 
-$('start').onclick = async () => {
+/* ---------- abas ---------- */
+function setMode(m) {
+  mode = m;
+  $('tabTuner').classList.toggle('on', m === 'tuner');
+  $('tabTrain').classList.toggle('on', m === 'train');
+  $('tunerPanel').hidden = m !== 'tuner';
+  $('trainPanel').hidden = m !== 'train';
+  $('start').hidden = micReady || m === 'train'; // no treino, tocar numa corda já liga o microfone
+}
+$('tabTuner').onclick = () => setMode('tuner');
+$('tabTrain').onclick = () => setMode('train');
+
+/* ---------- microfone ---------- */
+async function startMic() {
+  if (micReady) return true;
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
     });
-    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
+    if (ctx.state === 'suspended') await ctx.resume();
     const src = ctx.createMediaStreamSource(stream);
     analyser = ctx.createAnalyser();
     analyser.fftSize = 4096;
     src.connect(analyser);
     buf = new Float32Array(analyser.fftSize);
-    $('start').style.display = 'none';
+    micReady = true;
+    $('start').hidden = true;
     $('msg').textContent = '';
     try { await navigator.wakeLock?.request('screen'); } catch (e) {}
     loop();
+    return true;
   } catch (e) {
-    $('msg').textContent = 'Não consegui acessar o microfone. Verifique a permissão e se a página está em https:// (' + e.name + ').';
+    $('msg').textContent = 'Não consegui acessar o microfone. Verifique a permissão (' + e.name + ').';
+    return false;
   }
+}
+$('start').onclick = startMic;
+
+/* ---------- som de referência (síntese aditiva: afinação exata) ---------- */
+const TONE_SECONDS = 2.5;
+function playString(s) {
+  const t0 = ctx.currentTime + 0.02;
+  const master = ctx.createGain();
+  master.gain.value = 0.35;
+  master.connect(ctx.destination);
+  const amps = [1, 0.6, 0.4, 0.28, 0.2, 0.14, 0.1];
+  amps.forEach((a, k) => {
+    const h = k + 1;
+    const osc = ctx.createOscillator();
+    osc.frequency.value = s.f * h;
+    const g = ctx.createGain();
+    const dur = TONE_SECONDS / Math.sqrt(h);          // harmônicos agudos somem antes
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(a, t0 + 0.006);    // ataque de "beliscada"
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(g).connect(master);
+    osc.start(t0);
+    osc.stop(t0 + dur + 0.05);
+  });
+  // não deixa o microfone "ouvir" a própria referência
+  ignoreUntil = t0 + TONE_SECONDS + 0.25;
+  samples = []; history = [];
+}
+
+/* ---------- treino ---------- */
+function loadBest(key) { try { return +localStorage.getItem('best-' + key) || 0; } catch (e) { return 0; } }
+function saveBest(key, v) { try { localStorage.setItem('best-' + key, v); } catch (e) {} }
+
+function resetRound() {
+  train.revealed = false;
+  samples = [];
+  $('blind').hidden = false;
+  $('result').hidden = true;
+  $('reveal').hidden = false;
+  $('again').hidden = true;
+  $('reveal').disabled = !train.target;
+  $('msg').textContent = '';
+  $('trainHint').textContent = train.target
+    ? `Afine a ${train.target.corda}ª corda (${train.target.n}) de ouvido e toque-a algumas vezes. Quando achar que está certo, peça a pontuação.`
+    : 'Escolha a corda para ouvir o som de referência. Depois afine de ouvido.';
+}
+
+$('trainStrings').onclick = async e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (!(await startMic())) return;
+  train.target = GUITAR[+b.dataset.i];
+  document.querySelectorAll('#trainStrings button').forEach(x => x.classList.toggle('on', x === b));
+  $('replay').disabled = false;
+  resetRound();
+  playString(train.target);
+};
+$('replay').onclick = () => { if (train.target) playString(train.target); };
+$('again').onclick = () => { resetRound(); playString(train.target); };
+
+function centsFromTarget(f) { return 1200 * Math.log2(f / train.target.f); }
+
+$('reveal').onclick = () => {
+  const now = performance.now();
+  const recent = samples.filter(s => now - s.t < 3000).map(s => s.f);
+  if (recent.length < 8) {
+    $('msg').textContent = 'Não ouvi a corda. Toque-a e peça a pontuação enquanto ela ainda soa.';
+    return;
+  }
+  const cents = centsFromTarget(median(recent));
+  const abs = Math.abs(cents);
+  const points = abs <= 2 ? 100 : Math.max(0, Math.round(100 - (abs - 2) * 2));
+
+  $('score').innerHTML = `${points}<small>/100</small>`;
+  $('score').classList.toggle('good', points >= 90);
+  $('verdict').textContent = points >= 95 ? 'Perfeito! 🎯' : points >= 80 ? 'Muito bom!'
+    : points >= 60 ? 'Quase lá' : abs > 300 ? 'Parece outra nota' : 'Continue praticando';
+  $('scoreCents').textContent = abs <= 2 ? 'No ponto'
+    : `${cents > 0 ? '+' : ''}${Math.round(cents)} cents · ${cents > 0 ? 'agudo demais' : 'grave demais'}`;
+  const best = loadBest(train.target.key);
+  if (points > best) saveBest(train.target.key, points);
+  $('best').textContent = points > best && best > 0 ? `Novo recorde nesta corda! (antes: ${best})`
+    : `Recorde nesta corda: ${Math.max(best, points)}`;
+
+  train.revealed = true;
+  $('msg').textContent = '';
+  $('blind').hidden = true;
+  $('result').hidden = false;
+  $('reveal').hidden = true;
+  $('again').hidden = false;
+  $('trainHint').textContent = `Agora termine de afinar a ${train.target.corda}ª corda olhando o medidor.`;
+  setNeedle($('needle2'), $('liveCents'), cents);
 };
 
-// Autocorrelação (variante "ACF2+") com interpolação parabólica
+/* ---------- detecção de altura (autocorrelação) ---------- */
+function rmsOf(b) { let s = 0; for (let i = 0; i < b.length; i++) s += b[i] * b[i]; return Math.sqrt(s / b.length); }
+
 function detectPitch(b, sr) {
   const n = b.length;
-  let rms = 0;
-  for (let i = 0; i < n; i++) rms += b[i] * b[i];
-  if (Math.sqrt(rms / n) < 0.01) return -1; // silêncio
-
-  // recorta as bordas fracas
+  if (rmsOf(b) < 0.01) return -1; // silêncio
   let r1 = 0, r2 = n - 1, th = 0.2;
   for (let i = 0; i < n / 2; i++) if (Math.abs(b[i]) < th) { r1 = i; break; }
   for (let i = 1; i < n / 2; i++) if (Math.abs(b[n - i]) < th) { r2 = n - i; break; }
   const x = b.slice(r1, r2), m = x.length;
-
   const c = new Float32Array(m);
   for (let lag = 0; lag < m; lag++) {
     let s = 0;
@@ -98,48 +277,69 @@ function detectPitch(b, sr) {
   let maxV = -1, maxP = -1;
   for (let i = d; i < m; i++) if (c[i] > maxV) { maxV = c[i]; maxP = i; }
   if (maxP <= 0 || maxP >= m - 1) return -1;
-
   const y1 = c[maxP - 1], y2 = c[maxP], y3 = c[maxP + 1];
   const a = (y1 + y3 - 2 * y2) / 2, bb = (y3 - y1) / 2;
-  const T = a ? maxP - bb / (2 * a) : maxP;
-  return sr / T;
+  return sr / (a ? maxP - bb / (2 * a) : maxP);
 }
 
 function median(arr) { const s = [...arr].sort((a, b) => a - b); return s[s.length >> 1]; }
 
+/* ---------- laço principal ---------- */
 function loop() {
   analyser.getFloatTimeDomainData(buf);
-  const f = detectPitch(buf, ctx.sampleRate);
+  const playing = ctx.currentTime < ignoreUntil;
+  const f = playing ? -1 : detectPitch(buf, ctx.sampleRate);
 
   if (f > 60 && f < 1200) {
     silentFrames = 0;
     history.push(f); if (history.length > 5) history.shift();
-    show(median(history));
+    const fm = median(history);
+    const now = performance.now();
+    samples.push({ t: now, f: fm });
+    while (samples.length && now - samples[0].t > 4000) samples.shift();
+
+    showTuner(fm);
+    if (mode === 'train' && train.target) {
+      $('mystery').classList.add('hearing');
+      if (train.revealed) setNeedle($('needle2'), $('liveCents'), centsFromTarget(fm));
+    }
   } else if (++silentFrames > 30) {
     history = [];
-    $('note').innerHTML = '–'; $('cents').textContent = ''; $('freq').textContent = '';
-    $('needle').style.left = '50%'; document.body.classList.remove('ok');
-    document.querySelectorAll('.strings span').forEach(s => s.classList.remove('on'));
+    clearTuner();
+    $('mystery').classList.remove('hearing');
   }
+  $('mystery').textContent = playing ? '🔊' : '?';
   requestAnimationFrame(loop);
 }
 
-function show(f) {
+function setNeedle(needle, label, cents) {
+  const ok = Math.abs(cents) <= 5;
+  needle.style.left = (50 + Math.max(-50, Math.min(50, cents))) + '%';
+  needle.style.background = ok ? '#3c6' : '#fff';
+  if (label) {
+    label.textContent = ok ? 'Afinado ✓'
+      : `${cents > 0 ? '+' : ''}${Math.round(cents)} cents · ${cents < 0 ? 'aperte' : 'afrouxe'}`;
+    label.classList.toggle('good', ok);
+  }
+}
+
+function showTuner(f) {
   const midiF = 69 + 12 * Math.log2(f / A4);
   const midi = Math.round(midiF);
-  const cents = Math.round((midiF - midi) * 100);
+  const cents = (midiF - midi) * 100;
   const name = NAMES[(midi % 12 + 12) % 12], oct = Math.floor(midi / 12) - 1;
-
   $('note').innerHTML = `${name}<sub>${oct}</sub>`;
-  $('cents').textContent = Math.abs(cents) <= 5 ? 'Afinado ✓'
-    : (cents < 0 ? `${cents} cents · aperte` : `+${cents} cents · afrouxe`);
   $('freq').textContent = f.toFixed(1) + ' Hz';
-  $('needle').style.left = (50 + cents) + '%';
-  const ok = Math.abs(cents) <= 5;
-  document.body.classList.toggle('ok', ok);
-  $('needle').style.background = ok ? '#3c6' : '#fff';
-  document.querySelectorAll('.strings span').forEach(s =>
-    s.classList.toggle('on', s.dataset.k === name + oct));
+  setNeedle($('needle'), $('cents'), cents);
+  $('tunerPanel').classList.toggle('ok', Math.abs(cents) <= 5);
+  document.querySelectorAll('#strings span').forEach(s => s.classList.toggle('on', s.dataset.k === name + oct));
+}
+
+function clearTuner() {
+  $('note').innerHTML = '–'; $('cents').textContent = ''; $('freq').textContent = '';
+  $('needle').style.left = '50%'; $('needle').style.background = '#fff';
+  $('tunerPanel').classList.remove('ok');
+  document.querySelectorAll('#strings span').forEach(s => s.classList.remove('on'));
 }
 </script>
 </body>
